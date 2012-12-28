@@ -21,6 +21,7 @@ void testApp::setup(){
 	
 	depthFbo.allocate(ofGetWidth(), ofGetHeight());
 	colorFbo.allocate(ofGetWidth(), ofGetHeight());
+	forAO.allocate(ofGetWidth(), ofGetHeight());
 	
 	// gui
 	
@@ -35,20 +36,40 @@ void testApp::setup(){
 	gui.addSlider("Depth Far", depthPass_far, 100, 10000);
 	gui.addSlider("Depth Near", depthPass_near, 0, 1000);
 	
+	gui.addSlider("AO Min Threshold", ao_minThreshold, 0, 1.0);
+	gui.addSlider("AO Max Threshold", ao_maxThreshold, 0, 10);
+	gui.addSlider("AO Radius", ao_radius, 0, 200.0);
+	gui.addSlider("AO Weight", ao_weight, 0, 10.0);
+	gui.addSlider("AO nearClip", ao_nearClip, 0, 5.0);
+	gui.addSlider("AO farClip", ao_farClip, 0, 5000.0);
+	
+	
+	
 	gui.loadFromXML();
 
 	directionalLight.setDirectional();
-	directionalLight.setDiffuseColor(ofColor(255,255,255));
+	directionalLight.setAmbientColor(ofColor(255,255,255));
+	directionalLight.setDiffuseColor(ofColor(0,255,255));
 	
 	ofSetSmoothLighting(true);
 	
-	directionalLight.setOrientation(ofVec3f(0,50,50));
+	directionalLight.setOrientation(ofVec3f(10,50,50));
 	
 	drawDepth = false;
+	
+	// ambient oclussion
+	ambientO.setup(ofGetWidth(), ofGetHeight(), GL_RGBA16);
 }
 
 //--------------------------------------------------------------
 void testApp::update(){
+	
+	ambientO.setClipPlanes(ao_nearClip, ao_farClip);
+	ambientO.setMaxThreshold(ao_maxThreshold);
+	ambientO.setMinThreshold(ao_minThreshold);
+	ambientO.setRadius(ao_radius);
+	ambientO.setWeight(ao_weight);
+	
 	
 	if(gui.isOn()) {
 		cam.disableMouseInput();
@@ -60,11 +81,16 @@ void testApp::update(){
 
 }
 //--------------------------------------------------------------
-void testApp::drawScene() {
+void testApp::drawScene(bool flip) {
+	
+	if(flip) {
+		cam.setScale(1,-1,1);
+	} else {
+		cam.setScale(1,1,1);
+	}
+	
 	ofPushMatrix();
-	//ofScale(1,1,-1);
 	cam.begin();
-	//ofTranslate(ofGetWidth()/2, ofGetHeight()/2);
 	ofRotateX(-30);
 	for(int i=0;i<15;i++) {
 		for(int j=0;j<15;j++) {
@@ -72,11 +98,12 @@ void testApp::drawScene() {
 			float x = ofMap(i,0, 15,-500,500);
 			float z = ofMap(j,0, 15, 0, -2000);
 			
-			float hue = ofMap(i, 0,30,0,255);
+			float hue = ofMap(i, 0,30,100,200);
 			ofColor bc;
 			bc.setHsb(hue, 255, 255);
 			ofSetColor(bc);
-			ofBox(x,0,z,50);
+			//ofBox(x,0,z,50);
+			ofSphere(x,0,z,30);
 		}
 	}
 	cam.end();
@@ -85,35 +112,47 @@ void testApp::drawScene() {
 //--------------------------------------------------------------
 void testApp::draw(){
 	glEnable(GL_DEPTH_TEST);
-	ofBackgroundGradient(ofColor(0,0,0), ofColor(50,50,50));
+	//ofBackgroundGradient(ofColor(0,0,0), ofColor(50,50,50));
 	
 	ofEnableLighting();
 	colorFbo.begin();
 	ofClear(0,0,0,0);
 	
 	directionalLight.enable();
-	drawScene();
+	drawScene(false);
 	directionalLight.disable();
 	
 	colorFbo.end();
 	ofDisableLighting();
 
-	
+	glPushAttrib(GL_ALL_ATTRIB_BITS);
+	ambientO.begin();
+	ofBackgroundGradient(ofColor(255,100,100), ofColor(0, 0, 0));
+	directionalLight.enable();
+	drawScene(true);
+	directionalLight.disable();
+	ambientO.end(true);
+	glPopAttrib();
+
 	depthFbo.begin();
 	ofClear(0,0,0,0);
 	depthPass.begin();
 	depthPass.setUniform1f("near", depthPass_near);
 	depthPass.setUniform1f("far", depthPass_far);
-	drawScene();
+	drawScene(false);
 	depthPass.end();
-	
 	depthFbo.end();
 	
+	ofEnableAlphaBlending();
+	
+	ofBackgroundGradient(ofColor(255,100,100), ofColor(0, 0, 0));
 	if(drawDepth) {
+		ofSetColor(255,255,255);
 		depthFbo.draw(0,0);
 	} else {
+		ofSetColor(255,255,255);
 		dofPass.begin();
-		dofPass.setUniformTexture("bgl_RenderedTexture", colorFbo.getTextureReference(),0);
+		dofPass.setUniformTexture("bgl_RenderedTexture", ambientO.getDrawFbo()->getTextureReference(),0);
 		dofPass.setUniformTexture("bgl_DepthTexture", depthFbo.getTextureReference(),1);
 		dofPass.setUniform1f("bgl_RenderedTextureWidth", ofGetWidth());
 		dofPass.setUniform1f("bgl_RenderedTextureHeight", ofGetHeight());
@@ -123,10 +162,13 @@ void testApp::draw(){
 		dofPass.setUniform1f("showFocus", dof_showFocus);
 		dofPass.setUniform1f("maxblur", dof_maxblur);
 		
-		colorFbo.draw(0,0);
-		
+		ambientO.getDrawFbo()->draw(0,0);
 		dofPass.end();
+	
 	}
+	
+	ofDisableAlphaBlending();
+	ofSetColor(255,255,255);
 
 	if(gui.isOn()) {
 		glPushAttrib(GL_ALL_ATTRIB_BITS);

@@ -2,6 +2,7 @@
 
 #include "ofMain.h"
 #include "ofxSimpleGuiToo.h"
+#include "ofxSSAO.h"
 
 class testApp : public ofBaseApp{
 
@@ -20,7 +21,7 @@ class testApp : public ofBaseApp{
 		void dragEvent(ofDragInfo dragInfo);
 		void gotMessage(ofMessage msg);
 	
-	void drawScene();
+	void drawScene(bool flip);
 	
 	ofEasyCam cam;
 	
@@ -30,6 +31,7 @@ class testApp : public ofBaseApp{
 	// ofFbo
 	ofFbo depthFbo;
 	ofFbo colorFbo;
+	ofFbo forAO;
 	
 	// shaders vars
 	
@@ -45,6 +47,13 @@ class testApp : public ofBaseApp{
 	ofLight directionalLight;
 	
 	bool drawDepth;
+	ofxSSAO ambientO;
+	float ao_nearClip;
+	float ao_farClip;
+	float ao_radius;
+	float ao_weight;
+	float ao_minThreshold;
+	float ao_maxThreshold;
 	
 		
 };
